@@ -1,20 +1,39 @@
 # Enterprise Task & Project Management SaaS
 
-## Overview
+A scalable, microservices-based SaaS platform for enterprise task and project management, built with Python (FastAPI), Kafka, and Docker.
 
-A complete **microservices-based Task & Project Management SaaS platform** built with 7 services, a shared library, and Docker infrastructure.
+## 🚀 Features
 
-## Architecture
+### Core
+- **Multi-Tenancy**: Organization-based data isolation with `org_id` scoping
+- **Authentication**: Secure registration, login, and RS256 JWT-based auth with refresh tokens
+- **RBAC**: Fine-grained permissions for Organizations (Admin/Member) and Projects (Owner/Admin/Manager/Member/Viewer)
+
+### Project Management
+- **Projects**: Create projects, clone from templates, manage members
+- **Tasks**: Hierarchical tasks (sub-tasks), dependencies, priority levels, and due dates
+- **Views**: Kanban board with drag-drop reordering, Gantt charts, and Calendar views
+- **Customization**: Custom Kanban statuses per project
+
+### Collaboration
+- **Comments**: Threaded discussions with `@mention` support
+- **Time Tracking**: Manual time logging and start/stop timers
+- **Files**: Secure file upload (min.io/S3) with versioning and pre-signed download URLs
+- **WebSockets**: Real-time notifications for task assignments and updates
+
+## 🏗 Architecture
+
+The platform follows a **Database-per-Service** pattern with event-driven communication via Kafka.
 
 ```mermaid
 graph TB
-    Client --> GW["API Gateway :8000"]
-    GW --> Auth["Auth Service :8001"]
-    GW --> Org["Org Service :8002"]
-    GW --> Proj["Project Service :8003"]
-    GW --> Task["Task Service :8004"]
-    GW --> Notif["Notification Service :8005"]
-    GW --> File["File Service :8006"]
+    Client --> GW["API Gateway (:8000)"]
+    GW --> Auth["Auth Service (:8001)"]
+    GW --> Org["Org Service (:8002)"]
+    GW --> Proj["Project Service (:8003)"]
+    GW --> Task["Task Service (:8004)"]
+    GW --> Notif["Notification Service (:8005)"]
+    GW --> File["File Service (:8006)"]
     
     Auth --> PG[(PostgreSQL)]
     Org --> PG
@@ -23,63 +42,96 @@ graph TB
     
     Auth --> Redis[(Redis)]
     GW --> Redis
-    Notif --> Redis
     
-    Auth --> Kafka{Kafka}
-    Org --> Kafka
-    Proj --> Kafka
-    Task --> Kafka
-    Notif --> Kafka
+    Auth --"User Created"--> Kafka{Kafka}
+    Proj --"Project Created"--> Kafka
+    Task --"Task Assigned"--> Kafka
     
-    File --> MinIO[(MinIO / S3)]
+    File --> MinIO[(MinIO/S3)]
 ```
 
-## Services
+### Services Overview
 
-| Service | Port | Key Features |
-|---------|------|-------------|
-| **API Gateway** | 8000 | Reverse proxy, JWT validation, rate limiting, org header injection |
-| **Auth** | 8001 | Register, login, RS256 JWT, refresh tokens, Redis blacklisting |
-| **Organization** | 8002 | Org CRUD, members with roles, teams, team memberships |
-| **Project** | 8003 | Project CRUD, templates, memberships, custom Kanban statuses |
-| **Task** | 8004 | Task CRUD, sub-tasks, dependencies, comments, time tracking, views |
-| **Notification** | 8005 | Kafka consumer, WebSocket real-time, notification preferences |
-| **File** | 8006 | MinIO upload, file versioning, pre-signed download URLs |
+| Service | Port | Database | Responsibilities |
+|---------|------|----------|------------------|
+| **API Gateway** | 8000 | Redis | Entry point, Auth check, Rate limiting, Routing |
+| **Auth** | 8001 | `auth_db` | Users, JWT issuance, Password reset |
+| **Organization** | 8002 | `org_db` | Organizations, Teams, Org Memberships |
+| **Project** | 8003 | `project_db` | Projects, Templates, Project Roles |
+| **Task** | 8004 | `task_db` | Tasks, Sub-tasks, Time logs, Comments |
+| **Notification** | 8005 | `notif_db` | In-app notifications, WebSocket delivery |
+| **File** | 8006 | `file_db` | File metadata, S3 integration |
 
-## Shared & Core Libraries
+## 🛠 Getting Started
 
-- **Config**: Centralized `BaseServiceSettings` with Pydantic Settings
-- **Database**: Async SQLAlchemy engine/session factory (`DatabaseSessionManager`)
-- **Auth**: RS256 JWT creation/verification, `get_current_user` dependency factory
-- **RBAC**: `OrgRole`/`ProjectRole` enums, permission matrix, FastAPI dependency factories
-- **Events**: Kafka producer/consumer helpers, topic/event type constants
-- **Middleware**: `OrgScopingMiddleware` for multi-tenancy
+### Prerequisites
+- Docker & Docker Compose
+- Python 3.11+ (for local development)
 
-## Key Design Decisions
+### Quick Start
 
-- **Database-per-service** for strong isolation
-- **RS256 JWT** with separate access/refresh tokens
-- **Kafka** for async inter-service events
-- **Redis Pub/Sub** for WebSocket real-time notifications
-- **MinIO** (S3-compatible) for file storage with versioning
-- **Sliding window rate limiting** in the gateway via Redis sorted sets
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/JohnOlorunsogo/Task-and-Project-Management-SaaS.git
+   cd Task-and-Project-Management-SaaS
+   ```
 
-## Project Structure
+2. **Generate Keys**
+   Generate RS256 keys for JWT signing:
+   ```bash
+   mkdir -p keys
+   openssl genrsa -out keys/private.pem 2048
+   openssl rsa -in keys/private.pem -outform PEM -pubout -out keys/public.pem
+   ```
 
+3. **Environment Setup**
+   Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+4. **Launch with Docker Compose**
+   ```bash
+   docker-compose up -d --build
+   ```
+   This will start:
+   - PostgreSQL (port 5432)
+   - Redis (port 6379)
+   - Kafka + Zookeeper (port 9092)
+   - MinIO (port 9000/9001)
+   - All 7 API services
+
+5. **Verify Installation**
+   Check the API Gateway health:
+   ```bash
+   curl http://localhost:8000/health/services
+   ```
+
+## 📚 API Documentation
+
+Once running, access the automatic Swagger UI docs for each service:
+
+- **Gateway**: http://localhost:8000/docs
+- **Auth**: http://localhost:8001/docs
+- **Org**: http://localhost:8002/docs
+- **Project**: http://localhost:8003/docs
+- **Task**: http://localhost:8004/docs
+
+Authentication follows the `Bearer <token>` standard. Obtain a token via `POST /api/v1/auth/login`.
+
+## 🧪 Development
+
+### Running Local Database Migrations
+We use Alembic for migrations. To run them locally:
+
+```bash
+# Example for Auth Service
+cd services/auth_service
+alembic upgrade head
 ```
-Task_project_management_saas/
-├── docker-compose.yml
-├── .env.example
-├── scripts/init-databases.sql
-├── keys/ (private.pem, public.pem)
-├── shared/
-│   └── shared/ (config, database, auth, events, middleware, models)
-└── services/
-    ├── api_gateway/
-    ├── auth_service/
-    ├── org_service/
-    ├── project_service/
-    ├── task_service/
-    ├── notification_service/
-    └── file_service/
+
+### Shared Library
+Common code (models, utils) resides in `shared/`. If you modify it, rebuild the containers:
+```bash
+docker-compose build
 ```
