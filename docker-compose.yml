@@ -1,0 +1,257 @@
+# =============================================================================
+# Docker Compose - Enterprise Task & Project Management SaaS
+# Local Development Environment
+# =============================================================================
+version: "3.9"
+
+x-common-env: &common-env
+  POSTGRES_USER: taskpm_user
+  POSTGRES_PASSWORD: taskpm_secret_dev
+  REDIS_URL: redis://redis:6379/0
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+  JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+  JWT_ALGORITHM: RS256
+  JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+  JWT_REFRESH_TOKEN_EXPIRE_DAYS: "7"
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ROOT_USER: minioadmin
+  MINIO_ROOT_PASSWORD: minioadmin
+  MINIO_BUCKET: taskpm-files
+  MINIO_USE_SSL: "false"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: taskpm_user
+      POSTGRES_PASSWORD: taskpm_secret_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskpm_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Microservices
+  # ---------------------------------------------------------------------------
+  api_gateway:
+    build:
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *common-env
+      AUTH_SERVICE_URL: http://auth_service:8001
+      ORG_SERVICE_URL: http://org_service:8002
+      PROJECT_SERVICE_URL: http://project_service:8003
+      TASK_SERVICE_URL: http://task_service:8004
+      NOTIFICATION_SERVICE_URL: http://notification_service:8005
+      FILE_SERVICE_URL: http://file_service:8006
+      RATE_LIMIT_PER_MINUTE: "60"
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./shared:/app/shared_lib:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  auth_service:
+    build:
+      context: .
+      dockerfile: services/auth_service/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+asyncpg://taskpm_user:taskpm_secret_dev@postgres:5432/auth_db
+      SERVICE_PORT: "8001"
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./shared:/app/shared_lib:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  org_service:
+    build:
+      context: .
+      dockerfile: services/org_service/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+asyncpg://taskpm_user:taskpm_secret_dev@postgres:5432/org_db
+      SERVICE_PORT: "8002"
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./shared:/app/shared_lib:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  project_service:
+    build:
+      context: .
+      dockerfile: services/project_service/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+asyncpg://taskpm_user:taskpm_secret_dev@postgres:5432/project_db
+      SERVICE_PORT: "8003"
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./shared:/app/shared_lib:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  task_service:
+    build:
+      context: .
+      dockerfile: services/task_service/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+asyncpg://taskpm_user:taskpm_secret_dev@postgres:5432/task_db
+      SERVICE_PORT: "8004"
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./shared:/app/shared_lib:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  notification_service:
+    build:
+      context: .
+      dockerfile: services/notification_service/Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+asyncpg://taskpm_user:taskpm_secret_dev@postgres:5432/notification_db
+      SERVICE_PORT: "8005"
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./shared:/app/shared_lib:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  file_service:
+    build:
+      context: .
+      dockerfile: services/file_service/Dockerfile
+    ports:
+      - "8006:8006"
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+asyncpg://taskpm_user:taskpm_secret_dev@postgres:5432/file_db
+      SERVICE_PORT: "8006"
+    volumes:
+      - ./keys:/app/keys:ro
+      - ./shared:/app/shared_lib:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  zookeeper_data:
+  kafka_data:
+  minio_data:
