@@ -32,7 +32,7 @@ from app.schemas import (
     UserResponse,
 )
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
 
 
 class AuthService:
@@ -119,11 +119,23 @@ class AuthService:
         result = await self.db.execute(stmt)
         user = result.scalar_one_or_none()
 
-        if not user or not pwd_context.verify(data.password, user.hashed_password):
+        if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
             )
+
+        # Verify password and update hash if needed (migration from bcrypt to bcrypt_sha256)
+        verified, updated_hash = pwd_context.verify_and_update(data.password, user.hashed_password)
+        if not verified:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+
+        if updated_hash:
+            user.hashed_password = updated_hash
+            await self.db.flush()
 
         if not user.is_active:
             raise HTTPException(
@@ -199,11 +211,17 @@ class AuthService:
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        if not pwd_context.verify(data.current_password, user.hashed_password):
+        # Verify current password and update hash if needed
+        verified, updated_hash = pwd_context.verify_and_update(data.current_password, user.hashed_password)
+        if not verified:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Current password is incorrect",
             )
+
+        if updated_hash:
+            # Hash already updated, but we are about to change it anyway
+            pass
 
         user.hashed_password = pwd_context.hash(data.new_password)
         await self.db.flush()

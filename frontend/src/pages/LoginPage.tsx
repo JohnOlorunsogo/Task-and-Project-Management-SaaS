@@ -33,7 +33,7 @@ const LoginPage: React.FC = () => {
         setError(null);
         try {
             const response = await apiClient.post("/auth/login", {
-                username: data.email, // backend expects 'username' for OAuth2 password flow
+                email: data.email,
                 password: data.password,
             });
 

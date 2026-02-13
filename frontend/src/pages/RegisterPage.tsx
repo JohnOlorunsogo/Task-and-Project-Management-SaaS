@@ -39,7 +39,7 @@ const RegisterPage: React.FC = () => {
 
             // 2. Log them in immediately after success
             const loginResponse = await apiClient.post("/auth/login", {
-                username: data.email,
+                email: data.email,
                 password: data.password,
             });
 
