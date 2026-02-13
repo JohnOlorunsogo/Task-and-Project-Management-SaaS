@@ -1,5 +1,6 @@
 FROM python:3.11-slim
 WORKDIR /app
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 COPY shared/ /app/shared_lib/
 RUN pip install --no-cache-dir /app/shared_lib/
 COPY services/file_service/requirements.txt .

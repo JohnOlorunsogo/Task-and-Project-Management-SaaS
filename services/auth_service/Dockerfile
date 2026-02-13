@@ -3,6 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install shared library
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 COPY shared/ /app/shared_lib/
 RUN pip install --no-cache-dir /app/shared_lib/
 
