@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 
 from shared.auth import TokenData
 
@@ -106,123 +106,34 @@ async def delete_task(
     await task_service.delete_task(task_id, current_user.org_id or "", current_user.user_id)
 
 
-# ---- Sub-tasks ----
-
-@router.post("/{task_id}/subtasks", response_model=TaskResponse, status_code=201)
-async def create_subtask(
-    task_id: uuid.UUID,
-    data: CreateSubtaskRequest,
-    current_user: TokenData = Depends(get_current_user),
-    task_service: TaskService = Depends(get_task_service),
-) -> TaskResponse:
-    return await task_service.create_subtask(
-        task_id, current_user.org_id or "", current_user.user_id, data
-    )
-
-
-@router.get("/{task_id}/subtasks", response_model=list[TaskListResponse])
-async def list_subtasks(
-    task_id: uuid.UUID,
-    current_user: TokenData = Depends(get_current_user),
-    task_service: TaskService = Depends(get_task_service),
-) -> list[TaskListResponse]:
-    return await task_service.list_subtasks(task_id)
-
-
-# ---- Assignments ----
-
-@router.post("/{task_id}/assign", response_model=TaskAssignmentResponse, status_code=201)
-async def assign_task(
-    task_id: uuid.UUID,
-    data: AssignTaskRequest,
-    current_user: TokenData = Depends(get_current_user),
-    task_service: TaskService = Depends(get_task_service),
-) -> TaskAssignmentResponse:
-    return await task_service.assign_task(task_id, data, current_user.user_id)
-
-
-@router.delete("/{task_id}/assign/{user_id}", status_code=204)
-async def unassign_task(
-    task_id: uuid.UUID,
-    user_id: uuid.UUID,
-    current_user: TokenData = Depends(get_current_user),
-    task_service: TaskService = Depends(get_task_service),
-) -> None:
-    await task_service.unassign_task(task_id, user_id)
-
-
-# ---- Dependencies ----
-
-@router.post("/{task_id}/dependencies", response_model=TaskDependencyResponse, status_code=201)
-async def add_dependency(
-    task_id: uuid.UUID,
-    data: CreateDependencyRequest,
-    current_user: TokenData = Depends(get_current_user),
-    task_service: TaskService = Depends(get_task_service),
-) -> TaskDependencyResponse:
-    return await task_service.add_dependency(task_id, data)
-
-
-@router.get("/{task_id}/dependencies", response_model=list[TaskDependencyResponse])
-async def list_dependencies(
-    task_id: uuid.UUID,
-    current_user: TokenData = Depends(get_current_user),
-    task_service: TaskService = Depends(get_task_service),
-) -> list[TaskDependencyResponse]:
-    return await task_service.list_dependencies(task_id)
-
-
-@router.delete("/{task_id}/dependencies/{dep_id}", status_code=204)
-async def remove_dependency(
-    task_id: uuid.UUID,
-    dep_id: uuid.UUID,
-    current_user: TokenData = Depends(get_current_user),
-    task_service: TaskService = Depends(get_task_service),
-) -> None:
-    await task_service.remove_dependency(dep_id)
-
-
-# ---- Reorder ----
-
-@router.put("/{task_id}/position", response_model=TaskResponse)
-async def reorder_task(
-    task_id: uuid.UUID,
-    data: ReorderTaskRequest,
-    current_user: TokenData = Depends(get_current_user),
-    task_service: TaskService = Depends(get_task_service),
-) -> TaskResponse:
-    return await task_service.reorder_task(task_id, current_user.org_id or "", data)
-
-
 # ---- Comments ----
 
-@router.post("/{task_id}/comments", response_model=CommentResponse, status_code=201)
+@router.post("/{task_id}/comments", response_model=TaskCommentResponse, status_code=201)
 async def add_comment(
     task_id: uuid.UUID,
+    project_id: uuid.UUID,
     data: CreateCommentRequest,
-    current_user: TokenData = Depends(get_current_user),
+    perm: PermissionResult = Depends(require_project_permission(ProjectPermission.POST_COMMENT)),
     task_service: TaskService = Depends(get_task_service),
-) -> CommentResponse:
-    return await task_service.add_comment(
-        task_id, current_user.org_id or "", current_user.user_id, data
-    )
+) -> TaskCommentResponse:
+    return await task_service.add_comment(task_id, perm.user_id, data)
 
 
-@router.get("/{task_id}/comments", response_model=list[CommentResponse])
+@router.get("/{task_id}/comments", response_model=list[TaskCommentResponse])
 async def list_comments(
     task_id: uuid.UUID,
-    current_user: TokenData = Depends(get_current_user),
+    project_id: uuid.UUID,
+    perm: PermissionResult = Depends(require_project_permission(ProjectPermission.VIEW)),
     task_service: TaskService = Depends(get_task_service),
-) -> list[CommentResponse]:
+) -> list[TaskCommentResponse]:
     return await task_service.list_comments(task_id)
 
 
-# ---- Time Entries ----
+# ---- Time Logs ----
 
-@router.post("/{task_id}/time-entries", response_model=TimeEntryResponse, status_code=201)
+@router.post("/{task_id}/time-logs", response_model=TimeLogResponse, status_code=201)
 async def log_time(
     task_id: uuid.UUID,
-    data: CreateTimeEntryRequest,
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> TimeEntryResponse:

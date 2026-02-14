@@ -12,9 +12,8 @@ from pydantic import BaseModel
 from shared.auth import TokenData
 
 
-# =============================================================================
+
 # Role Definitions
-# =============================================================================
 
 class OrgRole(str, Enum):
     ORG_ADMIN = "org_admin"
@@ -30,11 +29,11 @@ class ProjectRole(str, Enum):
     VIEWER = "viewer"
 
 
-# =============================================================================
 # Permission Definitions
-# =============================================================================
 
-class Permission(str, Enum):
+# Permission Definitions
+
+class ProjectPermission(str, Enum):
     # Project-level
     DELETE_PROJECT = "delete_project"
     EDIT_PROJECT = "edit_project"
@@ -53,34 +52,57 @@ class Permission(str, Enum):
     VIEW = "view"
 
 
+class OrgPermission(str, Enum):
+    # Org-level
+    MANAGE_ORG_MEMBERS = "manage_org_members"
+    MANAGE_ORG_ROLES = "manage_org_roles"
+    MANAGE_PROJECTS = "manage_projects"  # Create/Delete projects & templates
+    MANAGE_TEAMS = "manage_teams"
+    MANAGE_ORG_SETTINGS = "manage_org_settings"
+    VIEW_ANALYTICS = "view_analytics"
+
+
 # Project role → set of permissions
-PROJECT_PERMISSIONS: dict[ProjectRole, set[Permission]] = {
+PROJECT_PERMISSIONS: dict[ProjectRole, set[ProjectPermission]] = {
     ProjectRole.OWNER: {
-        Permission.DELETE_PROJECT, Permission.EDIT_PROJECT, Permission.MANAGE_MEMBERS,
-        Permission.ASSIGN_ROLES, Permission.CREATE_TASK, Permission.EDIT_ANY_TASK,
-        Permission.DELETE_ANY_TASK, Permission.ASSIGN_TASK, Permission.CHANGE_STATUS,
-        Permission.POST_COMMENT, Permission.LOG_TIME, Permission.MANAGE_ATTACHMENTS,
-        Permission.VIEW,
+        ProjectPermission.DELETE_PROJECT, ProjectPermission.EDIT_PROJECT, ProjectPermission.MANAGE_MEMBERS,
+        ProjectPermission.ASSIGN_ROLES, ProjectPermission.CREATE_TASK, ProjectPermission.EDIT_ANY_TASK,
+        ProjectPermission.DELETE_ANY_TASK, ProjectPermission.ASSIGN_TASK, ProjectPermission.CHANGE_STATUS,
+        ProjectPermission.POST_COMMENT, ProjectPermission.LOG_TIME, ProjectPermission.MANAGE_ATTACHMENTS,
+        ProjectPermission.VIEW,
     },
     ProjectRole.ADMIN: {
-        Permission.EDIT_PROJECT, Permission.MANAGE_MEMBERS, Permission.ASSIGN_ROLES,
-        Permission.CREATE_TASK, Permission.EDIT_ANY_TASK, Permission.DELETE_ANY_TASK,
-        Permission.ASSIGN_TASK, Permission.CHANGE_STATUS, Permission.POST_COMMENT,
-        Permission.LOG_TIME, Permission.MANAGE_ATTACHMENTS, Permission.VIEW,
+        ProjectPermission.EDIT_PROJECT, ProjectPermission.MANAGE_MEMBERS, ProjectPermission.ASSIGN_ROLES,
+        ProjectPermission.CREATE_TASK, ProjectPermission.EDIT_ANY_TASK, ProjectPermission.DELETE_ANY_TASK,
+        ProjectPermission.ASSIGN_TASK, ProjectPermission.CHANGE_STATUS, ProjectPermission.POST_COMMENT,
+        ProjectPermission.LOG_TIME, ProjectPermission.MANAGE_ATTACHMENTS, ProjectPermission.VIEW,
     },
     ProjectRole.PROJECT_MANAGER: {
-        Permission.CREATE_TASK, Permission.EDIT_ANY_TASK, Permission.DELETE_ANY_TASK,
-        Permission.ASSIGN_TASK, Permission.CHANGE_STATUS, Permission.POST_COMMENT,
-        Permission.LOG_TIME, Permission.MANAGE_ATTACHMENTS, Permission.VIEW,
+        ProjectPermission.CREATE_TASK, ProjectPermission.EDIT_ANY_TASK, ProjectPermission.DELETE_ANY_TASK,
+        ProjectPermission.ASSIGN_TASK, ProjectPermission.CHANGE_STATUS, ProjectPermission.POST_COMMENT,
+        ProjectPermission.LOG_TIME, ProjectPermission.MANAGE_ATTACHMENTS, ProjectPermission.VIEW,
     },
     ProjectRole.TEAM_MEMBER: {
-        Permission.CREATE_TASK, Permission.EDIT_ASSIGNED_TASK, Permission.DELETE_ASSIGNED_TASK,
-        Permission.CHANGE_STATUS, Permission.POST_COMMENT, Permission.LOG_TIME,
-        Permission.MANAGE_ATTACHMENTS, Permission.VIEW,
+        ProjectPermission.CREATE_TASK, ProjectPermission.EDIT_ASSIGNED_TASK, ProjectPermission.DELETE_ASSIGNED_TASK,
+        ProjectPermission.CHANGE_STATUS, ProjectPermission.POST_COMMENT, ProjectPermission.LOG_TIME,
+        ProjectPermission.MANAGE_ATTACHMENTS, ProjectPermission.VIEW,
     },
     ProjectRole.VIEWER: {
-        Permission.VIEW,
+        ProjectPermission.VIEW,
     },
+}
+
+# Org role -> set of permissions
+ORG_PERMISSIONS: dict[OrgRole, set[OrgPermission]] = {
+    OrgRole.ORG_ADMIN: {
+        OrgPermission.MANAGE_ORG_MEMBERS, OrgPermission.MANAGE_ORG_ROLES,
+        OrgPermission.MANAGE_PROJECTS, OrgPermission.MANAGE_TEAMS,
+        OrgPermission.MANAGE_ORG_SETTINGS, OrgPermission.VIEW_ANALYTICS,
+    },
+    OrgRole.PROJ_ADMIN: {
+        OrgPermission.MANAGE_PROJECTS, OrgPermission.MANAGE_TEAMS,
+    },
+    OrgRole.MEMBER: set(), # Members have no implicit org-level management permissions
 }
 
 
@@ -92,12 +114,38 @@ class PermissionResult(BaseModel):
     check_assignment: bool = False
 
 
-# =============================================================================
 # Org-Level RBAC Dependency
-# =============================================================================
+
+def require_org_permission(permission: OrgPermission):
+    """
+    FastAPI dependency factory: require a specific org-level permission.
+    """
+    async def _dependency(current_user: TokenData) -> TokenData:
+        if not current_user.org_role:
+             raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No organization role assigned",
+            )
+        
+        user_role = OrgRole(current_user.org_role)
+        allowed = ORG_PERMISSIONS.get(user_role, set())
+
+        if permission not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Org Permission '{permission.value}' denied for role '{user_role.value}'",
+            )
+        
+        return current_user
+
+    return _dependency
+
 
 def require_org_role(*roles: OrgRole):
-    """FastAPI dependency factory: require the user to have one of the given org-level roles."""
+    """
+    FastAPI dependency factory: require the user to have one of the given org-level roles.
+    DEPRECATED: Prefer require_org_permission for granular control.
+    """
 
     async def _dependency(current_user: TokenData) -> TokenData:
         if not current_user.org_role:
@@ -119,18 +167,16 @@ def require_org_role(*roles: OrgRole):
     return _dependency
 
 
-# =============================================================================
 # Project-Level RBAC Dependency
-# =============================================================================
 
-def require_project_permission(permission: Permission):
+def require_project_permission(permission: ProjectPermission):
     """
     FastAPI dependency factory: require a specific project-level permission.
 
     Usage in route:
         @router.post("/tasks")
         async def create_task(
-            perm: PermissionResult = Depends(require_project_permission(Permission.CREATE_TASK)),
+            perm: PermissionResult = Depends(require_project_permission(ProjectPermission.CREATE_TASK)),
             ...
         ):
 
@@ -168,7 +214,7 @@ def require_project_permission(permission: Permission):
 
         check_assignment = (
             role == ProjectRole.TEAM_MEMBER
-            and permission in (Permission.EDIT_ASSIGNED_TASK, Permission.DELETE_ASSIGNED_TASK)
+            and permission in (ProjectPermission.EDIT_ASSIGNED_TASK, ProjectPermission.DELETE_ASSIGNED_TASK)
         )
 
         return PermissionResult(

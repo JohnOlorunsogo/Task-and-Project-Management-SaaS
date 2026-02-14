@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends
 
 from shared.auth import TokenData
-from shared.auth.rbac import OrgRole, require_org_role
+from shared.auth.rbac import OrgPermission, require_org_permission
 
 from app.dependencies import get_current_user, get_org_service
 from app.schemas import (
@@ -52,7 +52,7 @@ async def get_org(
 async def update_org(
     org_id: uuid.UUID,
     data: UpdateOrgRequest,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_org_permission(OrgPermission.MANAGE_ORG_SETTINGS)),
     org_service: OrgService = Depends(get_org_service),
 ) -> OrgResponse:
     return await org_service.update_org(org_id, data)
@@ -73,7 +73,7 @@ async def list_members(
 async def add_member(
     org_id: uuid.UUID,
     data: AddMemberRequest,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_org_permission(OrgPermission.MANAGE_ORG_MEMBERS)),
     org_service: OrgService = Depends(get_org_service),
 ) -> OrgMemberResponse:
     return await org_service.add_member(org_id, data)
@@ -83,7 +83,7 @@ async def add_member(
 async def remove_member(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_org_permission(OrgPermission.MANAGE_ORG_MEMBERS)),
     org_service: OrgService = Depends(get_org_service),
 ) -> None:
     await org_service.remove_member(org_id, user_id)
@@ -94,7 +94,7 @@ async def change_member_role(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
     data: ChangeMemberRoleRequest,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_org_permission(OrgPermission.MANAGE_ORG_ROLES)),
     org_service: OrgService = Depends(get_org_service),
 ) -> OrgMemberResponse:
     return await org_service.change_member_role(org_id, user_id, data)
@@ -106,7 +106,7 @@ async def change_member_role(
 async def create_team(
     org_id: uuid.UUID,
     data: CreateTeamRequest,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_org_permission(OrgPermission.MANAGE_TEAMS)),
     org_service: OrgService = Depends(get_org_service),
 ) -> TeamResponse:
     return await org_service.create_team(org_id, data)
@@ -126,7 +126,7 @@ async def add_team_member(
     org_id: uuid.UUID,
     team_id: uuid.UUID,
     data: AddTeamMemberRequest,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_org_permission(OrgPermission.MANAGE_TEAMS)),
     org_service: OrgService = Depends(get_org_service),
 ) -> TeamMemberResponse:
     return await org_service.add_team_member(team_id, data)
@@ -147,7 +147,7 @@ async def remove_team_member(
     org_id: uuid.UUID,
     team_id: uuid.UUID,
     user_id: uuid.UUID,
-    current_user: TokenData = Depends(get_current_user),
+    current_user: TokenData = Depends(require_org_permission(OrgPermission.MANAGE_TEAMS)),
     org_service: OrgService = Depends(get_org_service),
 ) -> None:
     await org_service.remove_team_member(team_id, user_id)
