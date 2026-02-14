@@ -55,6 +55,14 @@ class OrgMemberResponse(BaseModel):
     created_at: datetime
 
 
+class UserMembershipResponse(BaseModel):
+    """Response for listing all memberships of a user."""
+    model_config = ConfigDict(from_attributes=True)
+    org_id: uuid.UUID
+    org_name: str
+    role: str
+
+
 # =============================================================================
 # Team Schemas
 # =============================================================================

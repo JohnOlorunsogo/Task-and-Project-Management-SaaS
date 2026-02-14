@@ -7,13 +7,15 @@ import uuid
 from fastapi import APIRouter, Depends
 
 from shared.auth import TokenData
-from shared.auth.rbac import OrgPermission, require_org_permission
+from shared.auth.rbac import OrgPermission
+
+from app.permissions import require_org_permission
 
 from app.dependencies import get_current_user, get_org_service
 from app.schemas import (
     AddMemberRequest, AddTeamMemberRequest, ChangeMemberRoleRequest,
     CreateOrgRequest, CreateTeamRequest, OrgMemberResponse, OrgResponse,
-    TeamMemberResponse, TeamResponse, UpdateOrgRequest,
+    TeamMemberResponse, TeamResponse, UpdateOrgRequest, UserMembershipResponse,
 )
 from app.services import OrgService
 
@@ -37,6 +39,19 @@ async def list_my_orgs(
     org_service: OrgService = Depends(get_org_service),
 ) -> list[OrgResponse]:
     return await org_service.list_user_orgs(current_user.user_id)
+
+
+@router.get("/memberships", response_model=list[UserMembershipResponse])
+async def list_memberships(
+    user_id: uuid.UUID,
+    # This endpoint is internal/admin, or self-user only.
+    # We will allow it for any authenticated user to check THEIR OWN memberships,
+    # or for services (which we assume skip auth or have service tokens).
+    # usage for now: Auth Service calls this.
+    # Simplification: we expect the caller to provide valid user_id.
+    org_service: OrgService = Depends(get_org_service),
+) -> list[UserMembershipResponse]:
+    return await org_service.list_user_memberships(str(user_id))
 
 
 @router.get("/{org_id}", response_model=OrgResponse)

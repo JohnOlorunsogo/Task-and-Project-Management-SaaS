@@ -143,12 +143,38 @@ class AuthService:
                 detail="Account is disabled",
             )
 
-        # Look up org membership from org_service (via stored info or inter-service call)
-        # For now, we include user_id and lookup org info separately
+        # Look up org membership
         token_data = {
             "sub": str(user.id),
             "email": user.email,
         }
+
+        # Query org_service for memberships via HTTP
+        # Shared DB access is not possible due to isolation
+        import httpx
+        from app.config import get_settings
+        settings = get_settings()
+        
+        # We assume org_service is reachable internal URL
+        # We perform a fire-and-forget style fetch or wait? we need it for token.
+        try:
+             async with httpx.AsyncClient() as client:
+                # org_service_url is e.g. http://org_service:8002
+                url = f"{settings.org_service_url}/organizations/memberships"
+                resp = await client.get(url, params={"user_id": str(user.id)})
+                if resp.status_code == 200:
+                    memberships = resp.json()
+                    if memberships:
+                        # Pick the first one as default context
+                        # In the future, user might select which org to login to
+                        first_org = memberships[0]
+                        token_data["org_id"] = first_org["org_id"]
+                        token_data["org_role"] = first_org["role"]
+        except Exception as e:
+            # Fallback: Login succeeds but without org context (user might be new or service down)
+            # Log error in production
+            print(f"Failed to fetch org memberships: {e}")
+            pass
 
         tokens = self._create_tokens(token_data)
 

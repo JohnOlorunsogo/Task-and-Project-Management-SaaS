@@ -8,7 +8,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 
 from shared.auth import TokenData
+from shared.auth.rbac import PermissionResult, ProjectPermission
 
+from app.permissions import require_project_permission
 from app.dependencies import get_current_user, get_task_service
 from app.schemas import (
     AssignTaskRequest, CalendarTaskResponse, CommentResponse,
@@ -108,32 +110,33 @@ async def delete_task(
 
 # ---- Comments ----
 
-@router.post("/{task_id}/comments", response_model=TaskCommentResponse, status_code=201)
+@router.post("/{task_id}/comments", response_model=CommentResponse, status_code=201)
 async def add_comment(
     task_id: uuid.UUID,
     project_id: uuid.UUID,
     data: CreateCommentRequest,
     perm: PermissionResult = Depends(require_project_permission(ProjectPermission.POST_COMMENT)),
     task_service: TaskService = Depends(get_task_service),
-) -> TaskCommentResponse:
+) -> CommentResponse:
     return await task_service.add_comment(task_id, perm.user_id, data)
 
 
-@router.get("/{task_id}/comments", response_model=list[TaskCommentResponse])
+@router.get("/{task_id}/comments", response_model=list[CommentResponse])
 async def list_comments(
     task_id: uuid.UUID,
     project_id: uuid.UUID,
     perm: PermissionResult = Depends(require_project_permission(ProjectPermission.VIEW)),
     task_service: TaskService = Depends(get_task_service),
-) -> list[TaskCommentResponse]:
+) -> list[CommentResponse]:
     return await task_service.list_comments(task_id)
 
 
 # ---- Time Logs ----
 
-@router.post("/{task_id}/time-logs", response_model=TimeLogResponse, status_code=201)
+@router.post("/{task_id}/time-logs", response_model=TimeEntryResponse, status_code=201)
 async def log_time(
     task_id: uuid.UUID,
+    data: CreateTimeEntryRequest,
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> TimeEntryResponse:

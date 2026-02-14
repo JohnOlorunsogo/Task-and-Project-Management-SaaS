@@ -69,6 +69,14 @@ class ProjectMemberResponse(BaseModel):
     created_at: datetime
 
 
+class UserProjectMembershipResponse(BaseModel):
+    """Response for checking membership of a user in a project."""
+    model_config = ConfigDict(from_attributes=True)
+    project_id: uuid.UUID
+    user_id: uuid.UUID
+    role: str
+
+
 # =============================================================================
 # Custom Status Schemas
 # =============================================================================

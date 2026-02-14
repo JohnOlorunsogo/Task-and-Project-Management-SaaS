@@ -5,13 +5,16 @@ import uuid
 from fastapi import APIRouter, Depends, Request, HTTPException
 
 from shared.auth import TokenData
-from shared.auth.rbac import ProjectPermission, OrgPermission, require_org_permission, require_project_permission, PermissionResult
+from shared.auth.rbac import ProjectPermission, OrgPermission, PermissionResult
+
+from app.permissions import require_org_permission, require_project_permission
 
 from app.dependencies import get_current_user, get_project_service
 from app.schemas import (
     AddProjectMemberRequest, ChangeProjectRoleRequest, CreateFromTemplateRequest,
     CreateProjectRequest, CreateStatusRequest, CustomStatusResponse,
     ProjectMemberResponse, ProjectResponse, UpdateProjectRequest, UpdateStatusRequest,
+    UserProjectMembershipResponse,
 )
 from app.services import ProjectService
 
@@ -166,6 +169,26 @@ async def remove_member(
     project_service: ProjectService = Depends(get_project_service),
 ) -> None:
     await project_service.remove_member(project_id, user_id)
+
+
+@router.get("/{project_id}/check-membership", response_model=UserProjectMembershipResponse)
+async def check_membership(
+    project_id: uuid.UUID,
+    user_id: uuid.UUID,
+    project_service: ProjectService = Depends(get_project_service),
+) -> UserProjectMembershipResponse:
+    """
+    Internal endpoint to check if a user is a member of a project.
+    Used by Task Service.
+    """
+    membership = await project_service.get_membership(project_id, user_id)
+    if not membership:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User is not a member of this project")
+    return UserProjectMembershipResponse(
+        project_id=membership.project_id,
+        user_id=membership.user_id,
+        role=membership.role
+    )
 
 
 # ---- Custom Statuses ----
