@@ -83,12 +83,14 @@ async def get_user_by_email(
     return user
 
 
-@router.put("/password", response_model=MessageResponse)
-async def change_password(
-    data: ChangePasswordRequest,
-    current_user: TokenData = Depends(get_current_user),
-    auth_service: AuthService = Depends(get_auth_service),
-) -> MessageResponse:
-    """Change the current user's password."""
     await auth_service.change_password(current_user.user_id, data)
     return MessageResponse(message="Password changed successfully")
+
+
+@router.post("/users/batch", response_model=list[UserResponse])
+async def get_users_batch(
+    data: BatchUserRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> list[UserResponse]:
+    """Get multiple users by ID (Internal use)."""
+    return await auth_service.get_users_batch(data.user_ids)
