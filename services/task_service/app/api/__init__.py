@@ -31,8 +31,13 @@ async def create_task(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> TaskResponse:
+    if not current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Organization context is required",
+        )
     return await task_service.create_task(
-        current_user.org_id or "", current_user.user_id, data
+        current_user.org_id, current_user.user_id, data
     )
 
 
@@ -45,8 +50,13 @@ async def list_tasks(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> list[TaskListResponse]:
+    if not current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Organization context is required",
+        )
     return await task_service.list_tasks(
-        org_id=current_user.org_id or "",
+        org_id=current_user.org_id,
         project_id=project_id,
         assignee_id=assignee_id,
         status_name=status_name,

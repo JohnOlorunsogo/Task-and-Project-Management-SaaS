@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 
 from shared.auth import TokenData
 from shared.auth.rbac import Permission, ProjectRole
@@ -28,11 +28,9 @@ async def create_project(
     current_user: TokenData = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
-    org_id = current_user.org_id
-    if not org_id:
-        from fastapi import HTTPException
+    if not current_user.org_id:
         raise HTTPException(400, "No organization context")
-    return await project_service.create_project(org_id, current_user.user_id, data)
+    return await project_service.create_project(current_user.org_id, current_user.user_id, data)
 
 
 @router.get("", response_model=list[ProjectResponse])
@@ -40,8 +38,10 @@ async def list_projects(
     current_user: TokenData = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service),
 ) -> list[ProjectResponse]:
+    if not current_user.org_id:
+        return []
     return await project_service.list_user_projects(
-        current_user.org_id or "", current_user.user_id
+        current_user.org_id, current_user.user_id
     )
 
 
@@ -51,7 +51,9 @@ async def list_all_projects(
     project_service: ProjectService = Depends(get_project_service),
 ) -> list[ProjectResponse]:
     """List all projects in org (OrgAdmin only in practice)."""
-    return await project_service.list_projects(current_user.org_id or "")
+    if not current_user.org_id:
+        return []
+    return await project_service.list_projects(current_user.org_id)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -60,7 +62,9 @@ async def get_project(
     current_user: TokenData = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
-    return await project_service.get_project(project_id, current_user.org_id or "")
+    if not current_user.org_id:
+        raise HTTPException(400, "No organization context")
+    return await project_service.get_project(project_id, current_user.org_id)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -70,7 +74,9 @@ async def update_project(
     current_user: TokenData = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
-    return await project_service.update_project(project_id, current_user.org_id or "", data)
+    if not current_user.org_id:
+        raise HTTPException(400, "No organization context")
+    return await project_service.update_project(project_id, current_user.org_id, data)
 
 
 @router.delete("/{project_id}", status_code=204)
@@ -80,7 +86,9 @@ async def delete_project(
     project_service: ProjectService = Depends(get_project_service),
 ) -> None:
     # RBAC: Only owner can delete — enforced at gateway/RBAC layer
-    await project_service.delete_project(project_id, current_user.org_id or "")
+    if not current_user.org_id:
+        raise HTTPException(400, "No organization context")
+    await project_service.delete_project(project_id, current_user.org_id)
 
 
 # ---- Templates ----
@@ -91,8 +99,10 @@ async def create_template(
     current_user: TokenData = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
+    if not current_user.org_id:
+        raise HTTPException(400, "No organization context")
     return await project_service.create_template(
-        current_user.org_id or "", current_user.user_id, data
+        current_user.org_id, current_user.user_id, data
     )
 
 
@@ -101,7 +111,9 @@ async def list_templates(
     current_user: TokenData = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service),
 ) -> list[ProjectResponse]:
-    return await project_service.list_templates(current_user.org_id or "")
+    if not current_user.org_id:
+        return []
+    return await project_service.list_templates(current_user.org_id)
 
 
 @router.post("/from-template/{template_id}", response_model=ProjectResponse, status_code=201)
@@ -111,8 +123,10 @@ async def create_from_template(
     current_user: TokenData = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
+    if not current_user.org_id:
+        raise HTTPException(400, "No organization context")
     return await project_service.create_from_template(
-        template_id, current_user.org_id or "", current_user.user_id, data
+        template_id, current_user.org_id, current_user.user_id, data
     )
 
 

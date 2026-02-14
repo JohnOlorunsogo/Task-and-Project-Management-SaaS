@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
@@ -77,6 +77,7 @@ def get_current_user(public_key: str, algorithm: str = "RS256"):
     """Factory that returns a FastAPI dependency for extracting the current user from JWT."""
 
     async def _dependency(
+        request: Request,
         credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
     ) -> TokenData:
         payload = verify_token(credentials.credentials, public_key, algorithm)
@@ -85,11 +86,16 @@ def get_current_user(public_key: str, algorithm: str = "RS256"):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token type",
             )
+
+        # org_id priority: JWT claim > X-Org-Id header (sent by frontend)
+        org_id = payload.get("org_id") or request.headers.get("x-org-id")
+
         return TokenData(
             user_id=payload["sub"],
             email=payload.get("email", ""),
-            org_id=payload.get("org_id"),
+            org_id=org_id,
             org_role=payload.get("org_role"),
         )
 
     return _dependency
+

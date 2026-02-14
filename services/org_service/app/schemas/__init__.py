@@ -35,8 +35,11 @@ class OrgResponse(BaseModel):
 # =============================================================================
 
 class AddMemberRequest(BaseModel):
-    user_id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
+    email: Optional[str] = Field(default=None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     role: str = Field(default="member", pattern=r"^(org_admin|proj_admin|member)$")
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChangeMemberRoleRequest(BaseModel):

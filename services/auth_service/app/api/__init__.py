@@ -69,6 +69,19 @@ async def get_me(
     return await auth_service.get_user(current_user.user_id)
 
 
+@router.get("/users/by-email/{email}", response_model=UserResponse)
+async def get_user_by_email(
+    email: str,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> UserResponse:
+    """Get a user by email (Internal/Admin use)."""
+    user = await auth_service.get_user_by_email(email)
+    if not user:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
 @router.put("/password", response_model=MessageResponse)
 async def change_password(
     data: ChangePasswordRequest,

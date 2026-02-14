@@ -6,7 +6,10 @@ import MainLayout from "./layouts/MainLayout";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
+import ProjectsListPage from "./pages/ProjectsListPage";
 import RegisterPage from "./pages/RegisterPage";
+import OnboardingPage from "./pages/OnboardingPage";
+import SettingsPage from "./pages/SettingsPage";
 
 const queryClient = new QueryClient();
 
@@ -25,10 +28,12 @@ function App() {
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
+            <Route path="/onboarding" element={<OnboardingPage />} />
             <Route element={<MainLayout children={<Outlet />} />}>
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/projects" element={<ProjectsListPage />} />
               <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
-              <Route path="/settings" element={<div className="p-8">Settings (WIP)</div>} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Route>
           </Route>
 

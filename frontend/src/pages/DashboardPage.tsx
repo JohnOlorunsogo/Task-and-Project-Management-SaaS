@@ -4,20 +4,26 @@ import { Plus, Folder, Users, Clock, ArrowRight } from "lucide-react";
 import { apiClient } from "@/api/client";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useOrgStore } from "@/store/orgStore";
+import CreateProjectModal from "@/components/CreateProjectModal";
 
 const DashboardPage: React.FC = () => {
+    const currentOrgId = useOrgStore((state) => state.currentOrgId);
+    const [isCreateOpen, setIsCreateOpen] = React.useState(false);
+
     const { data: projects, isLoading } = useQuery({
-        queryKey: ["projects"],
+        queryKey: ["projects", currentOrgId],
         queryFn: async () => {
             const response = await apiClient.get("/projects");
             return response.data;
         },
+        enabled: !!currentOrgId,
     });
 
     const stats = [
         { label: "Active Projects", value: projects?.length || 0, icon: Folder, color: "text-blue-600", bg: "bg-blue-50" },
-        { label: "Team Members", value: "12", icon: Users, color: "text-purple-600", bg: "bg-purple-50" },
-        { label: "Hours Tracked", value: "124h", icon: Clock, color: "text-orange-600", bg: "bg-orange-50" },
+        { label: "Team Members", value: "—", icon: Users, color: "text-purple-600", bg: "bg-purple-50" },
+        { label: "Hours Tracked", value: "—", icon: Clock, color: "text-orange-600", bg: "bg-orange-50" },
     ];
 
     return (
@@ -27,7 +33,10 @@ const DashboardPage: React.FC = () => {
                     <h1 className="text-2xl font-bold tracking-tight">Organization Overview</h1>
                     <p className="text-slate-500">Welcome back! Here is what is happening in your organization.</p>
                 </div>
-                <button className="bg-primary text-white px-4 py-2 rounded-md font-medium flex items-center shadow-sm hover:bg-primary/90 transition">
+                <button
+                    onClick={() => setIsCreateOpen(true)}
+                    className="bg-primary text-white px-4 py-2 rounded-md font-medium flex items-center shadow-sm hover:bg-primary/90 transition"
+                >
                     <Plus className="w-4 h-4 mr-2" />
                     New Project
                 </button>
@@ -64,7 +73,7 @@ const DashboardPage: React.FC = () => {
                             <p className="text-slate-500">No projects yet. Create your first one to get started!</p>
                         </div>
                     ) : (
-                        projects?.map((project: any) => (
+                        projects?.slice(0, 5).map((project: any) => (
                             <div key={project.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
                                 <div className="flex items-center space-x-4">
                                     <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center font-bold text-slate-600">
@@ -75,26 +84,22 @@ const DashboardPage: React.FC = () => {
                                         <p className="text-sm text-slate-500 truncate max-w-md">{project.description || "No description"}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center space-x-6">
-                                    <div className="hidden sm:flex -space-x-2">
-                                        {[1, 2, 3].map((i) => (
-                                            <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[10px] font-bold">
-                                                U{i}
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <Link
-                                        to={`/projects/${project.id}`}
-                                        className="p-2 text-slate-400 hover:text-primary transition-colors"
-                                    >
-                                        <ArrowRight className="w-5 h-5" />
-                                    </Link>
-                                </div>
+                                <Link
+                                    to={`/projects/${project.id}`}
+                                    className="p-2 text-slate-400 hover:text-primary transition-colors"
+                                >
+                                    <ArrowRight className="w-5 h-5" />
+                                </Link>
                             </div>
                         ))
                     )}
                 </div>
             </div>
+
+            <CreateProjectModal
+                isOpen={isCreateOpen}
+                onClose={() => setIsCreateOpen(false)}
+            />
         </div>
     );
 };

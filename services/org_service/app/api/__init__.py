@@ -17,7 +17,7 @@ from app.schemas import (
 )
 from app.services import OrgService
 
-router = APIRouter(prefix="/orgs", tags=["Organizations"])
+router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
 
 # ---- Organization CRUD ----
