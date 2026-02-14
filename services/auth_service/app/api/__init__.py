@@ -10,6 +10,7 @@ from shared.auth import TokenData
 from app.dependencies import get_auth_service, get_current_user
 from app.schemas import (
     AuthResponse,
+    BatchUserRequest,
     ChangePasswordRequest,
     LoginRequest,
     MessageResponse,

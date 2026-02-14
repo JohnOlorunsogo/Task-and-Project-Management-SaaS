@@ -159,7 +159,7 @@ class AuthService:
         # We perform a fire-and-forget style fetch or wait? we need it for token.
         try:
              async with httpx.AsyncClient() as client:
-                # org_service_url is e.g. http://org_service:8002
+                # org_service_url is http://org_service:8002
                 url = f"{settings.org_service_url}/organizations/memberships"
                 resp = await client.get(url, params={"user_id": str(user.id)})
                 if resp.status_code == 200:
@@ -271,6 +271,17 @@ class AuthService:
         if user:
             return UserResponse.model_validate(user)
         return None
+
+    async def get_users_batch(self, user_ids: list[uuid.UUID]) -> list[UserResponse]:
+        """Fetch multiple users by ID."""
+        if not user_ids:
+            return []
+        
+        stmt = select(User).where(User.id.in_(user_ids))
+        result = await self.db.execute(stmt)
+        users = result.scalars().all()
+        
+        return [UserResponse.model_validate(u) for u in users]
 
     def _create_tokens(self, token_data: dict) -> TokenPair:
         """Create access + refresh token pair."""

@@ -53,6 +53,9 @@ class OrgMemberResponse(BaseModel):
     user_id: uuid.UUID
     role: str
     created_at: datetime
+    # Enriched fields
+    email: Optional[str] = None
+    full_name: Optional[str] = None
 
 
 class UserMembershipResponse(BaseModel):

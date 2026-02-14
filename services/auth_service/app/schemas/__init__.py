@@ -9,9 +9,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 
-# =============================================================================
 # Request Schemas
-# =============================================================================
 
 
 class RegisterRequest(BaseModel):
@@ -23,6 +21,10 @@ class RegisterRequest(BaseModel):
         default=None, max_length=255,
         description="Organization name. If provided, creates a new org and assigns user as OrgAdmin."
     )
+
+
+class BatchUserRequest(BaseModel):
+    user_ids: list[uuid.UUID]
 
 
 class LoginRequest(BaseModel):
@@ -47,9 +49,7 @@ class UpdateProfileRequest(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=255)
 
 
-# =============================================================================
 # Response Schemas
-# =============================================================================
 
 
 class UserResponse(BaseModel):

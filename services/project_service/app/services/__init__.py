@@ -297,10 +297,43 @@ class ProjectService:
 
         return ProjectMemberResponse.model_validate(membership)
 
+    async def _enrich_members(self, members: list[ProjectMemberResponse]) -> list[ProjectMemberResponse]:
+        """Fetch user details from Auth Service and populate members."""
+        if not members:
+            return members
+
+        user_ids = [m.user_id for m in members]
+        
+        # Need to import get_settings inside method to avoid circular imports or context issues
+        from app.config import get_settings
+        import httpx
+        settings = get_settings()
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                url = f"{settings.auth_service_url}/auth/users/batch"
+                resp = await client.post(url, json={"user_ids": [str(uid) for uid in user_ids]})
+                
+                if resp.status_code == 200:
+                    users_data = resp.json()
+                    user_map = {u["id"]: u for u in users_data}
+                    
+                    for member in members:
+                        user = user_map.get(str(member.user_id))
+                        if user:
+                            member.email = user["email"]
+                            member.full_name = user["full_name"]
+        except Exception as e:
+            print(f"Failed to enrich project members: {e}")
+            pass
+            
+        return members
+
     async def list_members(self, project_id: uuid.UUID) -> list[ProjectMemberResponse]:
         stmt = select(ProjectMembership).where(ProjectMembership.project_id == project_id)
         result = await self.db.execute(stmt)
-        return [ProjectMemberResponse.model_validate(m) for m in result.scalars().all()]
+        members = [ProjectMemberResponse.model_validate(m) for m in result.scalars().all()]
+        return await self._enrich_members(members)
 
     async def get_membership(
         self, project_id: uuid.UUID, user_id: uuid.UUID

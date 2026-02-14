@@ -167,6 +167,18 @@ Add a user to the project.
 
 - **Response:** `ProjectMemberResponse` (201 Created)
 
+```json
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "project_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "user_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "role": "team_member",
+  "created_at": "2023-10-27T10:00:00Z",
+  "email": "user@example.com",
+  "full_name": "John Doe"
+}
+```
+
 ---
 
 ### 12. Change Member Role
@@ -337,6 +349,8 @@ Same fields as CreateProjectRequest.
 | user_id | UUID | User ID. |
 | role | string | Role name. |
 | created_at | datetime | Creation timestamp. |
+| email | string | User email. |
+| full_name | string | User full name. |
 
 **UserProjectMembershipResponse**
 | Field | Type | Description |

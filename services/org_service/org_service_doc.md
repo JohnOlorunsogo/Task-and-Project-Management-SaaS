@@ -106,7 +106,9 @@ List all members of an organization.
     "org_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "user_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "role": "member",
-    "created_at": "2023-10-27T10:00:00Z"
+    "created_at": "2023-10-27T10:00:00Z",
+    "email": "user@example.com",
+    "full_name": "John Doe"
   }
 ]
 ```
@@ -301,6 +303,8 @@ Remove a user from a team.
 | user_id | UUID | User ID. |
 | role | string | Role name. |
 | created_at | datetime | Creation timestamp. |
+| email | string | User email. |
+| full_name | string | User full name. |
 
 **UserMembershipResponse**
 | Field | Type | Description |
