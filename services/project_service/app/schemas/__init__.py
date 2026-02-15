@@ -78,6 +78,7 @@ class UserProjectMembershipResponse(BaseModel):
     project_id: uuid.UUID
     user_id: uuid.UUID
     role: str
+    permissions: list[str] = []
 
 
 # =============================================================================

@@ -67,7 +67,7 @@ async def get_me(
     auth_service: AuthService = Depends(get_auth_service),
 ) -> UserResponse:
     """Get the current user's profile."""
-    return await auth_service.get_user(current_user.user_id)
+    return await auth_service.get_user(current_user.user_id, current_user.org_role)
 
 
 @router.get("/users/by-email/{email}", response_model=UserResponse)

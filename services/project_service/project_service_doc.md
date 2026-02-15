@@ -358,6 +358,7 @@ Same fields as CreateProjectRequest.
 | project_id | UUID | Project ID. |
 | user_id | UUID | User ID. |
 | role | string | Role name. |
+| permissions | list[string] | List of project permissions. |
 
 **CustomStatusResponse**
 | Field | Type | Description |

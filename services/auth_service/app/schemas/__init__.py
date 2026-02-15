@@ -61,6 +61,7 @@ class UserResponse(BaseModel):
     full_name: str
     is_active: bool
     created_at: datetime
+    permissions: list[str] = []
 
 
 class AuthResponse(BaseModel):
@@ -69,6 +70,7 @@ class AuthResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
+    permissions: list[str] = []
 
 
 class TokenResponse(BaseModel):

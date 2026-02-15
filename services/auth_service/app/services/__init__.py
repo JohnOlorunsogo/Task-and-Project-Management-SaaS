@@ -178,10 +178,19 @@ class AuthService:
 
         tokens = self._create_tokens(token_data)
 
+        # Get permissions for the role
+        from shared.auth.rbac import get_org_permissions
+        org_role = token_data.get("org_role")
+        permissions = get_org_permissions(org_role) if org_role else []
+
+        user_response = UserResponse.model_validate(user)
+        user_response.permissions = permissions
+
         return AuthResponse(
             access_token=tokens.access_token,
             refresh_token=tokens.refresh_token,
-            user=UserResponse.model_validate(user),
+            user=user_response,
+            permissions=permissions,
         )
 
     async def refresh_token(self, refresh_token: str) -> TokenResponse:
@@ -252,7 +261,7 @@ class AuthService:
         user.hashed_password = pwd_context.hash(data.new_password)
         await self.db.flush()
 
-    async def get_user(self, user_id: str) -> UserResponse:
+    async def get_user(self, user_id: str, org_role: Optional[str] = None) -> UserResponse:
         """Get user profile."""
         stmt = select(User).where(User.id == uuid.UUID(user_id))
         result = await self.db.execute(stmt)
@@ -261,7 +270,13 @@ class AuthService:
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        return UserResponse.model_validate(user)
+        # Enrich with permissions if org_role is provided
+        resp = UserResponse.model_validate(user)
+        if org_role:
+            from shared.auth.rbac import get_org_permissions
+            resp.permissions = get_org_permissions(org_role)
+
+        return resp
 
     async def get_user_by_email(self, email: str) -> Optional[UserResponse]:
         """Get user by email."""

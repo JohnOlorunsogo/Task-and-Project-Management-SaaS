@@ -33,8 +33,10 @@ Register a new user account. Optionally creates an organization if `org_name` is
     "email": "user@example.com",
     "full_name": "John Doe",
     "is_active": true,
-    "created_at": "2023-10-27T10:00:00Z"
-  }
+    "created_at": "2023-10-27T10:00:00Z",
+    "permissions": ["manage_org_members", "create_project"]
+  },
+  "permissions": ["manage_org_members", "create_project"]
 }
 ```
 
@@ -122,7 +124,8 @@ Get the current user's profile information.
   "email": "user@example.com",
   "full_name": "John Doe",
   "is_active": true,
-  "created_at": "2023-10-27T10:00:00Z"
+  "created_at": "2023-10-27T10:00:00Z",
+  "permissions": ["manage_org_members", "create_project"]
 }
 ```
 
@@ -202,6 +205,7 @@ Change the current user's password.
 | full_name | string | User full name. |
 | is_active | boolean | Whether the account is active. |
 | created_at | datetime | Timestamp of creation. |
+| permissions | list[string] | List of organization permissions. |
 
 **AuthResponse**
 | Field | Type | Description |
@@ -210,6 +214,7 @@ Change the current user's password.
 | refresh_token | string | Refresh token. |
 | token_type | string | Token type (default "bearer"). |
 | user | UserResponse | User profile details. |
+| permissions | list[string] | List of organization permissions. |
 
 **TokenResponse**
 | Field | Type | Description |
