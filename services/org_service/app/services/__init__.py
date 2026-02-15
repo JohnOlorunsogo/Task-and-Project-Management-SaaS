@@ -6,7 +6,7 @@ import uuid
 from typing import Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select, func
+from sqlalchemy import delete, select, func, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -154,6 +154,29 @@ class OrgService:
         return OrgMemberResponse.model_validate(membership)
 
     async def remove_member(self, org_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        # Check if the user is the last org_admin
+        membership = await self.db.execute(
+            select(OrgMembership).where(
+                OrgMembership.org_id == org_id,
+                OrgMembership.user_id == user_id,
+            )
+        )
+        member = membership.scalar_one_or_none()
+        
+        if member and member.role == "org_admin":
+            # Count other admins
+            stmt = select(func.count()).select_from(OrgMembership).where(
+                OrgMembership.org_id == org_id,
+                OrgMembership.role == "org_admin",
+                OrgMembership.user_id != user_id
+            )
+            other_admins_count = await self.db.execute(stmt)
+            if other_admins_count.scalar() == 0:
+                 raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, 
+                    "Cannot remove the last Organization Admin."
+                )
+
         stmt = delete(OrgMembership).where(
             OrgMembership.org_id == org_id,
             OrgMembership.user_id == user_id,
@@ -181,6 +204,20 @@ class OrgService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Member not found")
 
         old_role = membership.role
+        if old_role == "org_admin" and data.role != "org_admin":
+             # Check if this is the last admin
+            stmt = select(func.count()).select_from(OrgMembership).where(
+                OrgMembership.org_id == org_id,
+                OrgMembership.role == "org_admin",
+                OrgMembership.user_id != user_id
+            )
+            other_admins_count = await self.db.execute(stmt)
+            if other_admins_count.scalar() == 0:
+                 raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, 
+                    "Cannot demote the last Organization Admin."
+                )
+
         membership.role = data.role
         await self.db.flush()
 

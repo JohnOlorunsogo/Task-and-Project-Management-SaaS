@@ -255,6 +255,18 @@ class ProjectService:
         return ProjectMemberResponse.model_validate(membership)
 
     async def remove_member(self, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        # Check if user is owner
+        # We need to check the Project table to see if this user is the owner_id
+        project_stmt = select(Project).where(Project.id == project_id)
+        project_res = await self.db.execute(project_stmt)
+        project = project_res.scalar_one_or_none()
+        
+        if project and project.owner_id == user_id:
+             raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, 
+                "Cannot remove the Project Owner. Transfer ownership first."
+            )
+
         stmt = delete(ProjectMembership).where(
             ProjectMembership.project_id == project_id,
             ProjectMembership.user_id == user_id,
@@ -280,6 +292,14 @@ class ProjectService:
         membership = result.scalar_one_or_none()
         if not membership:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Member not found")
+
+        
+        # Check if user is owner via Project table or current role
+        if membership.role == "owner":
+             raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, 
+                "Cannot change role of the Project Owner. Transfer ownership first."
+            )
 
         membership.role = data.role
         await self.db.flush()

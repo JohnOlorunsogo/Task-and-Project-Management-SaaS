@@ -242,3 +242,21 @@ def require_project_permission(permission: ProjectPermission):
     ) -> PermissionResult:
         return check_project_permission(current_user, membership, permission)
     return _dependency
+
+
+def get_org_permissions(role: str) -> list[str]:
+    """Return list of permissions for a given org role."""
+    try:
+        org_role = OrgRole(role)
+        return [p.value for p in ORG_PERMISSIONS.get(org_role, set())]
+    except ValueError:
+        return []
+
+
+def get_project_permissions(role: str) -> list[str]:
+    """Return list of permissions for a given project role."""
+    try:
+        proj_role = ProjectRole(role)
+        return [p.value for p in PROJECT_PERMISSIONS.get(proj_role, set())]
+    except ValueError:
+        return []
