@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import uuid
 from datetime import timedelta
 from typing import Optional
@@ -32,6 +34,7 @@ from app.schemas import (
     UserResponse,
 )
 
+logger = logging.getLogger("auth_service")
 pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
 
 
@@ -89,7 +92,7 @@ class AuthService:
         if data.org_name:
             org_id = str(uuid.uuid4())
             token_data["org_id"] = org_id
-            token_data["org_role"] = "org_admin"
+            # Note: org_role is NOT in JWT — resolved at request time
 
         tokens = self._create_tokens(token_data)
 
@@ -156,7 +159,7 @@ class AuthService:
         settings = get_settings()
         
         # We assume org_service is reachable internal URL
-        # We perform a fire-and-forget style fetch or wait? we need it for token.
+        memberships = []
         try:
              async with httpx.AsyncClient() as client:
                 # org_service_url is http://org_service:8002
@@ -166,21 +169,25 @@ class AuthService:
                     memberships = resp.json()
                     if memberships:
                         # Pick the first one as default context
-                        # In the future, user might select which org to login to
+                        # User can switch orgs via POST /auth/switch-org
                         first_org = memberships[0]
                         token_data["org_id"] = first_org["org_id"]
-                        token_data["org_role"] = first_org["role"]
+                        # org_role NOT in JWT — resolved at request time
         except Exception as e:
-            # Fallback: Login succeeds but without org context (user might be new or service down)
-            # Log error in production
-            print(f"Failed to fetch org memberships: {e}")
-            pass
+            # Fallback: Login succeeds but without org context
+            logger.warning("Failed to fetch org memberships: %s", e)
 
         tokens = self._create_tokens(token_data)
 
-        # Get permissions for the role
+        # Get permissions for the role using the membership data we already have
         from shared.auth.rbac import get_org_permissions
-        org_role = token_data.get("org_role")
+        org_role = None
+        if memberships:
+            org_id = token_data.get("org_id")
+            for m in memberships:
+                if m.get("org_id") == org_id:
+                    org_role = m.get("role")
+                    break
         permissions = get_org_permissions(org_role) if org_role else []
 
         user_response = UserResponse.model_validate(user)
@@ -211,15 +218,14 @@ class AuthService:
                 detail="Invalid token type",
             )
 
-        # Create new access token
+        # Create new access token — only carry forward identity claims
         token_data = {
             "sub": payload["sub"],
             "email": payload.get("email", ""),
         }
         if "org_id" in payload:
             token_data["org_id"] = payload["org_id"]
-        if "org_role" in payload:
-            token_data["org_role"] = payload["org_role"]
+        # org_role NOT carried forward — resolved at request time
 
         access_token = create_access_token(
             token_data, self.private_key, self.algorithm, self.access_expire
@@ -307,3 +313,71 @@ class AuthService:
             token_data, self.private_key, self.algorithm, self.refresh_expire
         )
         return TokenPair(access_token=access_token, refresh_token=refresh_token)
+
+    async def switch_org(self, user_id: str, org_id: str) -> AuthResponse:
+        """Switch active org context. Issues a new token with the target org_id.
+
+        Verifies the user is a member of the target org before issuing tokens.
+        """
+        import httpx
+        from app.config import get_settings
+        settings = get_settings()
+
+        # Verify membership via org_service
+        try:
+            async with httpx.AsyncClient() as client:
+                url = f"{settings.org_service_url}/organizations/memberships"
+                resp = await client.get(url, params={"user_id": user_id})
+                if resp.status_code == 200:
+                    memberships = resp.json()
+                    target = None
+                    for m in memberships:
+                        if m.get("org_id") == org_id:
+                            target = m
+                            break
+                    if not target:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Not a member of this organization",
+                        )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Failed to verify org membership",
+                    )
+        except httpx.RequestError as e:
+            logger.warning("Failed to contact org_service for switch_org: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization service unavailable",
+            )
+
+        # Fetch user for response
+        stmt = select(User).where(User.id == uuid.UUID(user_id))
+        result = await self.db.execute(stmt)
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Issue new tokens with the target org_id (no role!)
+        token_data = {
+            "sub": user_id,
+            "email": user.email,
+            "org_id": org_id,
+        }
+        tokens = self._create_tokens(token_data)
+
+        # Include permissions in response
+        from shared.auth.rbac import get_org_permissions
+        org_role = target.get("role")
+        permissions = get_org_permissions(org_role) if org_role else []
+
+        user_response = UserResponse.model_validate(user)
+        user_response.permissions = permissions
+
+        return AuthResponse(
+            access_token=tokens.access_token,
+            refresh_token=tokens.refresh_token,
+            user=user_response,
+            permissions=permissions,
+        )

@@ -2,6 +2,14 @@
 
 Base URL: `/auth`
 
+## Architecture Notes
+
+> [!IMPORTANT]
+> **Identity-Only JWT**: Access tokens contain only identity claims (`user_id`, `email`, `org_id`). Organization roles are **not** stored in the JWT — they are resolved at request time by each service using a Redis-cached `PermissionResolver`. This ensures role changes take effect immediately without requiring re-authentication.
+
+> [!NOTE]
+> **Organization Switching**: Users belonging to multiple organizations can switch their active org context via `POST /auth/switch-org` without re-authentication. This issues a new token pair with the target `org_id`.
+
 ## Endpoints
 
 ### 1. Register User
@@ -110,7 +118,47 @@ Logout by blacklisting the refresh token.
 
 ---
 
-### 5. Get Current User
+### 5. Switch Organization
+Switch the active organization context. Verifies the user is a member of the target organization and issues new tokens.
+
+- **URL:** `/switch-org`
+- **Method:** `POST`
+- **Auth Required:** Yes
+- **Request Body:** `SwitchOrgRequest`
+
+```json
+{
+  "org_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+```
+
+- **Response:** `AuthResponse` (200 OK)
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUz...",
+  "refresh_token": "def50200...",
+  "token_type": "bearer",
+  "user": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "email": "user@example.com",
+    "full_name": "John Doe",
+    "is_active": true,
+    "created_at": "2023-10-27T10:00:00Z",
+    "permissions": ["manage_org_members", "create_project"]
+  },
+  "permissions": ["manage_org_members", "create_project"]
+}
+```
+
+- **Errors:**
+  - 403 Forbidden: User is not a member of the target organization.
+  - 502 Bad Gateway: Failed to verify organization membership.
+  - 503 Service Unavailable: Organization service is unreachable.
+
+---
+
+### 6. Get Current User
 Get the current user's profile information.
 
 - **URL:** `/me`
@@ -131,7 +179,7 @@ Get the current user's profile information.
 
 ---
 
-### 6. Get User by Email
+### 7. Get User by Email
 Get a user's details by their email address. Primarily for internal service use or admin actions.
 
 - **URL:** `/users/by-email/{email}`
@@ -143,7 +191,7 @@ Get a user's details by their email address. Primarily for internal service use 
 
 ---
 
-### 7. Change Password
+### 8. Change Password
 Change the current user's password.
 
 - **URL:** `/password`
@@ -188,6 +236,11 @@ Change the current user's password.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | refresh_token | string | Yes | Valid refresh token. |
+
+**SwitchOrgRequest**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| org_id | UUID | Yes | Target organization ID to switch to. |
 
 **ChangePasswordRequest**
 | Field | Type | Required | Description |

@@ -21,13 +21,15 @@ from app.schemas import (
 )
 from app.config import get_settings
 import httpx
+import redis.asyncio as aioredis
 
 
 class OrgService:
     """Organization business logic."""
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(self, db: AsyncSession, redis_client: aioredis.Redis | None = None) -> None:
         self.db = db
+        self.redis = redis_client
 
     # ---- Organizations ----
 
@@ -151,6 +153,11 @@ class OrgService:
             key=str(org_id),
         )
 
+        # Push role to Redis cache
+        if self.redis:
+            from shared.auth.resolver import PermissionResolver
+            await PermissionResolver.set_org_role(self.redis, str(user_id), str(org_id), data.role)
+
         return OrgMemberResponse.model_validate(membership)
 
     async def remove_member(self, org_id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -191,6 +198,11 @@ class OrgService:
             key=str(org_id),
         )
 
+        # Invalidate cached role
+        if self.redis:
+            from shared.auth.resolver import PermissionResolver
+            await PermissionResolver.invalidate_org_role(self.redis, str(user_id), str(org_id))
+
     async def change_member_role(
         self, org_id: uuid.UUID, user_id: uuid.UUID, data: ChangeMemberRoleRequest
     ) -> OrgMemberResponse:
@@ -230,6 +242,11 @@ class OrgService:
             },
             key=str(org_id),
         )
+
+        # Invalidate cached role so all services see the new role immediately
+        if self.redis:
+            from shared.auth.resolver import PermissionResolver
+            await PermissionResolver.invalidate_org_role(self.redis, str(user_id), str(org_id))
 
         return OrgMemberResponse.model_validate(membership)
 

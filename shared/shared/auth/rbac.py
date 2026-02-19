@@ -118,15 +118,29 @@ class PermissionResult(BaseModel):
 
 # Org-Level RBAC Logic
 
-def check_org_permission(user: TokenData, permission: OrgPermission) -> None:
+def check_org_permission(
+    user: TokenData,
+    permission: OrgPermission,
+    target_org_id: str | None = None,
+) -> None:
     """
     Verify if the user has the required organization permission.
     Raises HTTPException if denied.
+
+    When target_org_id is provided, also verifies the user's current org
+    context matches the target org (prevents cross-org privilege escalation).
     """
     if not user.org_role:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No organization role assigned",
+        )
+
+    # Org-match guard: verify user is operating in the correct org
+    if target_org_id and user.org_id and user.org_id != target_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operation not permitted on a different organization",
         )
 
     user_role = OrgRole(user.org_role)

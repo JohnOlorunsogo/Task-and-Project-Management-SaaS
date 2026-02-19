@@ -38,6 +38,11 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class SwitchOrgRequest(BaseModel):
+    """Request to switch active organization context."""
+    org_id: uuid.UUID
+
+
 class ChangePasswordRequest(BaseModel):
     """Change password request."""
     current_password: str

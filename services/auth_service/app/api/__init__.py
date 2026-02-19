@@ -16,6 +16,7 @@ from app.schemas import (
     MessageResponse,
     RefreshRequest,
     RegisterRequest,
+    SwitchOrgRequest,
     TokenResponse,
     UserResponse,
 )
@@ -59,6 +60,19 @@ async def logout(
     """Logout by blacklisting the refresh token."""
     await auth_service.logout(data.refresh_token)
     return MessageResponse(message="Successfully logged out")
+
+
+@router.post("/switch-org", response_model=AuthResponse)
+async def switch_org(
+    data: SwitchOrgRequest,
+    current_user: TokenData = Depends(get_current_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> AuthResponse:
+    """Switch the active organization context. Issues new tokens for the target org."""
+    return await auth_service.switch_org(
+        user_id=current_user.user_id,
+        org_id=str(data.org_id),
+    )
 
 
 @router.get("/me", response_model=UserResponse)

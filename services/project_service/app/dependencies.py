@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import Depends
+import redis.asyncio as aioredis
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth import TokenData, get_current_user as _get_current_user_factory
+from shared.auth.resolver import PermissionResolver
 from shared.database import db_manager
 
 from app.config import get_settings
@@ -13,16 +15,43 @@ from app.services import ProjectService
 
 _settings = get_settings()
 
+# Base JWT decoder (identity-only — no role)
+_get_jwt_user = _get_current_user_factory(
+    _settings.jwt_public_key, _settings.jwt_algorithm
+)
+
 
 async def get_db() -> AsyncSession:
     async for session in db_manager.get_session():
         yield session
 
 
-get_current_user = _get_current_user_factory(
-    _settings.jwt_public_key, _settings.jwt_algorithm
-)
+def get_redis(request: Request) -> aioredis.Redis:
+    """Get the Redis client stored on app state during lifespan."""
+    return request.app.state.redis
 
 
-async def get_project_service(db: AsyncSession = Depends(get_db)) -> ProjectService:
-    return ProjectService(db=db)
+def get_resolver(request: Request) -> PermissionResolver:
+    """Get the PermissionResolver stored on app state during lifespan."""
+    return request.app.state.resolver
+
+
+async def get_current_user(
+    jwt_user: TokenData = Depends(_get_jwt_user),
+    resolver: PermissionResolver = Depends(get_resolver),
+) -> TokenData:
+    """Enrich JWT identity with live org_role from Redis cache (or HTTP fallback)."""
+    if not jwt_user.org_id:
+        return jwt_user
+
+    org_role = await resolver.get_org_role(jwt_user.user_id, jwt_user.org_id)
+    jwt_user.org_role = org_role
+    return jwt_user
+
+
+async def get_project_service(
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+) -> ProjectService:
+    redis_client = getattr(request.app.state, "redis", None) if request else None
+    return ProjectService(db=db, redis_client=redis_client)

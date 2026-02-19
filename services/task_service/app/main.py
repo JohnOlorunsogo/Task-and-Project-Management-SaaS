@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+import redis.asyncio as aioredis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from shared.auth.resolver import PermissionResolver
 from shared.database import db_manager
 from shared.events.producer import event_producer
 from shared.middleware import OrgScopingMiddleware
@@ -32,10 +34,22 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created")
 
+    # Redis + PermissionResolver
+    redis_client = aioredis.from_url(settings.redis_url, decode_responses=False)
+    app.state.redis = redis_client
+    app.state.resolver = PermissionResolver(
+        redis_client=redis_client,
+        org_service_url=settings.org_service_url,
+        project_service_url=settings.project_service_url,
+        internal_service_key=settings.internal_service_key,
+    )
+    logger.info("Redis + PermissionResolver initialized")
+
     await event_producer.start(settings.kafka_bootstrap_servers)
     yield
 
     await event_producer.stop()
+    await redis_client.aclose()
     await db_manager.close()
 
 

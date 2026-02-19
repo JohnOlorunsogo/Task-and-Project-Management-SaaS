@@ -2,6 +2,17 @@
 
 Base URL: `/organizations`
 
+## Architecture Notes
+
+> [!IMPORTANT]
+> **Org-Match Guard**: All `{org_id}` endpoints verify that the path `org_id` matches the user's current organization context (from JWT `org_id`). This prevents cross-org privilege escalation — e.g., an OrgAdmin in Org A cannot operate on Org B.
+
+> [!NOTE]
+> **Request-Time Role Resolution**: Since org_service owns the `org_memberships` table, it resolves `org_role` directly from its database (not from the JWT). The resolved role is also pushed to Redis for other services to consume.
+
+> [!NOTE]
+> **Cache Invalidation**: When memberships change (`add_member`, `remove_member`, `change_member_role`), the org_service immediately invalidates or updates the corresponding Redis cache entry so all services see the new role instantly.
+
 ## Endpoints
 
 ### 1. Create Organization

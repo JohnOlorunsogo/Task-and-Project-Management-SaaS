@@ -2,6 +2,17 @@
 
 Base URL: `/projects`
 
+## Architecture Notes
+
+> [!NOTE]
+> **Request-Time Role Resolution**: The project_service resolves `org_role` at request time via Redis cache (with HTTP fallback to org_service), rather than reading it from the JWT.
+
+> [!NOTE]
+> **Project-Level RBAC**: Project membership and role checks use the service's own `project_memberships` table. Org-level permissions (e.g., `MANAGE_PROJECTS`) are checked using the request-time resolved `org_role`.
+
+> [!NOTE]
+> **Cache Invalidation**: When project memberships change (`add_member`, `remove_member`, `change_member_role`), the project_service immediately invalidates or updates the corresponding Redis cache entry for project roles.
+
 ## Endpoints
 
 ### 1. Create Project

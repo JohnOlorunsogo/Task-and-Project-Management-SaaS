@@ -29,11 +29,15 @@ DEFAULT_STATUSES = [
 ]
 
 
+import redis.asyncio as aioredis
+
+
 class ProjectService:
     """Project business logic."""
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(self, db: AsyncSession, redis_client: aioredis.Redis | None = None) -> None:
         self.db = db
+        self.redis = redis_client
 
     # ---- Projects ----
 
@@ -252,6 +256,13 @@ class ProjectService:
             key=str(project_id),
         )
 
+        # Push project role to Redis cache
+        if self.redis:
+            from shared.auth.resolver import PermissionResolver
+            await PermissionResolver.set_project_role(
+                self.redis, str(data.user_id), str(project_id), data.role
+            )
+
         return ProjectMemberResponse.model_validate(membership)
 
     async def remove_member(self, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -280,6 +291,13 @@ class ProjectService:
             {"event_type": PROJECT_MEMBER_REMOVED, "project_id": str(project_id), "user_id": str(user_id)},
             key=str(project_id),
         )
+
+        # Invalidate cached project role
+        if self.redis:
+            from shared.auth.resolver import PermissionResolver
+            await PermissionResolver.invalidate_project_role(
+                self.redis, str(user_id), str(project_id)
+            )
 
     async def change_member_role(
         self, project_id: uuid.UUID, user_id: uuid.UUID, data: ChangeProjectRoleRequest
@@ -314,6 +332,13 @@ class ProjectService:
             },
             key=str(project_id),
         )
+
+        # Invalidate cached project role
+        if self.redis:
+            from shared.auth.resolver import PermissionResolver
+            await PermissionResolver.invalidate_project_role(
+                self.redis, str(user_id), str(project_id)
+            )
 
         return ProjectMemberResponse.model_validate(membership)
 

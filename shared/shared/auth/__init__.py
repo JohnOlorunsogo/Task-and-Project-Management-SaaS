@@ -15,11 +15,15 @@ security_scheme = HTTPBearer()
 
 
 class TokenData(BaseModel):
-    """Decoded JWT payload."""
+    """Decoded JWT payload.
+
+    org_role is no longer stored in the JWT — it is resolved at
+    request time by the PermissionResolver and injected here.
+    """
     user_id: str
     email: str
     org_id: Optional[str] = None
-    org_role: Optional[str] = None
+    org_role: Optional[str] = None  # Populated at request time, NOT from JWT
 
 
 class TokenPair(BaseModel):
@@ -74,7 +78,11 @@ def verify_token(token: str, public_key: str, algorithm: str = "RS256") -> dict[
 
 
 def get_current_user(public_key: str, algorithm: str = "RS256"):
-    """Factory that returns a FastAPI dependency for extracting the current user from JWT."""
+    """Factory that returns a FastAPI dependency for extracting the current user from JWT.
+
+    The returned TokenData contains identity + org_id but NOT org_role.
+    org_role must be resolved separately using PermissionResolver.
+    """
 
     async def _dependency(
         request: Request,
@@ -94,8 +102,7 @@ def get_current_user(public_key: str, algorithm: str = "RS256"):
             user_id=payload["sub"],
             email=payload.get("email", ""),
             org_id=org_id,
-            org_role=payload.get("org_role"),
+            # org_role intentionally NOT set from JWT — resolved at request time
         )
 
     return _dependency
-
