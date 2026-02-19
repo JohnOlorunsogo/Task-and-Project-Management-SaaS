@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
 import redis.asyncio as redis
@@ -109,7 +110,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -138,7 +139,6 @@ async def mark_read(
     current_user: TokenData = Depends(get_current_user),
     svc: NotificationService = Depends(get_notification_service),
 ) -> None:
-    import uuid
     await svc.mark_read(uuid.UUID(notification_id), current_user.user_id)
 
 
@@ -196,10 +196,9 @@ async def websocket_notifications(websocket: WebSocket):
 
     try:
         while True:
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=5.0)
             if message and message["type"] == "message":
                 await websocket.send_text(message["data"])
-            await asyncio.sleep(0.1)
     except WebSocketDisconnect:
         pass
     finally:

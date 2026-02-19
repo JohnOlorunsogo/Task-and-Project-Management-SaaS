@@ -83,10 +83,6 @@ async def get_user_by_email(
     return user
 
 
-    await auth_service.change_password(current_user.user_id, data)
-    return MessageResponse(message="Password changed successfully")
-
-
 @router.post("/users/batch", response_model=list[UserResponse])
 async def get_users_batch(
     data: BatchUserRequest,

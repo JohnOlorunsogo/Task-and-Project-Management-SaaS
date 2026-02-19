@@ -1,12 +1,11 @@
-
 from __future__ import annotations
 
 import uuid
+import logging
 from typing import Any, Optional
 
+import httpx
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth import TokenData
 from shared.auth.rbac import (
@@ -14,7 +13,20 @@ from shared.auth.rbac import (
     ProjectPermission,
     check_project_permission,
 )
+from app.config import get_settings
 from app.dependencies import get_current_user, get_db
+
+logger = logging.getLogger("task_service")
+
+# Module-level client for connection pooling (M2 fix)
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=5.0)
+    return _http_client
 
 
 async def get_project_membership(
@@ -24,22 +36,21 @@ async def get_project_membership(
     """
     Fetch project membership for the current user via Project Service HTTP call.
     """
-    import httpx
-    from app.config import get_settings
     settings = get_settings()
+    client = _get_http_client()
 
-    # Create a new client or use a singleton in production
-    async with httpx.AsyncClient() as client:
-        # project_service_url is e.g. http://project_service:8003
-        try:
-             url = f"{settings.project_service_url}/projects/{project_id}/check-membership"
-             resp = await client.get(url, params={"user_id": current_user.user_id})
-             if resp.status_code == 200:
-                 return resp.json()
-        except Exception as e:
-            print(f"Failed to check project membership: {e}")
-            pass
-    
+    try:
+        url = f"{settings.project_service_url}/projects/{project_id}/check-membership"
+        resp = await client.get(
+            url,
+            params={"user_id": current_user.user_id},
+            headers={"x-internal-service-key": settings.internal_service_key},
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        logger.warning("Failed to check project membership: %s", e)
+
     return None
 
 

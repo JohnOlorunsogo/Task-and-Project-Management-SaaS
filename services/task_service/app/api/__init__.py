@@ -25,6 +25,16 @@ from app.services import TaskService
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
+def _require_org_id(current_user: TokenData) -> str:
+    """Extract org_id from token, raising 400 if missing."""
+    if not current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Organization context is required",
+        )
+    return current_user.org_id
+
+
 # ---- Task CRUD ----
 
 @router.post("", response_model=TaskResponse, status_code=201)
@@ -33,14 +43,8 @@ async def create_task(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> TaskResponse:
-    if not current_user.org_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Organization context is required",
-        )
-    return await task_service.create_task(
-        current_user.org_id, current_user.user_id, data
-    )
+    org_id = _require_org_id(current_user)
+    return await task_service.create_task(org_id, current_user.user_id, data)
 
 
 @router.get("", response_model=list[TaskListResponse])
@@ -52,13 +56,9 @@ async def list_tasks(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> list[TaskListResponse]:
-    if not current_user.org_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Organization context is required",
-        )
+    org_id = _require_org_id(current_user)
     return await task_service.list_tasks(
-        org_id=current_user.org_id,
+        org_id=org_id,
         project_id=project_id,
         assignee_id=assignee_id,
         status_name=status_name,
@@ -72,8 +72,9 @@ async def my_tasks(
     task_service: TaskService = Depends(get_task_service),
 ) -> list[TaskListResponse]:
     """Get tasks assigned to the current user."""
+    org_id = _require_org_id(current_user)
     return await task_service.list_tasks(
-        org_id=current_user.org_id or "",
+        org_id=org_id,
         assignee_id=uuid.UUID(current_user.user_id),
     )
 
@@ -84,7 +85,8 @@ async def get_task(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> TaskResponse:
-    return await task_service.get_task(task_id, current_user.org_id or "")
+    org_id = _require_org_id(current_user)
+    return await task_service.get_task(task_id, org_id)
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
@@ -94,9 +96,8 @@ async def update_task(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> TaskResponse:
-    return await task_service.update_task(
-        task_id, current_user.org_id or "", current_user.user_id, data
-    )
+    org_id = _require_org_id(current_user)
+    return await task_service.update_task(task_id, org_id, current_user.user_id, data)
 
 
 @router.delete("/{task_id}", status_code=204)
@@ -105,7 +106,8 @@ async def delete_task(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> None:
-    await task_service.delete_task(task_id, current_user.org_id or "", current_user.user_id)
+    org_id = _require_org_id(current_user)
+    await task_service.delete_task(task_id, org_id, current_user.user_id)
 
 
 # ---- Comments ----
@@ -118,7 +120,7 @@ async def add_comment(
     perm: PermissionResult = Depends(require_project_permission(ProjectPermission.POST_COMMENT)),
     task_service: TaskService = Depends(get_task_service),
 ) -> CommentResponse:
-    return await task_service.add_comment(task_id, perm.user_id, data)
+    return await task_service.add_comment(task_id, perm.org_id, perm.user_id, data)
 
 
 @router.get("/{task_id}/comments", response_model=list[CommentResponse])
@@ -140,9 +142,8 @@ async def log_time(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> TimeEntryResponse:
-    return await task_service.log_time(
-        task_id, current_user.org_id or "", current_user.user_id, data
-    )
+    org_id = _require_org_id(current_user)
+    return await task_service.log_time(task_id, org_id, current_user.user_id, data)
 
 
 @router.post("/{task_id}/time-entries/start", response_model=StartTimerResponse, status_code=201)
@@ -151,9 +152,8 @@ async def start_timer(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> StartTimerResponse:
-    return await task_service.start_timer(
-        task_id, current_user.org_id or "", current_user.user_id
-    )
+    org_id = _require_org_id(current_user)
+    return await task_service.start_timer(task_id, org_id, current_user.user_id)
 
 
 @router.put("/{task_id}/time-entries/{entry_id}/stop", response_model=TimeEntryResponse)
@@ -183,7 +183,8 @@ async def kanban_view(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> KanbanResponse:
-    return await task_service.get_kanban(project_id, current_user.org_id or "")
+    org_id = _require_org_id(current_user)
+    return await task_service.get_kanban(project_id, org_id)
 
 
 @router.get("/views/gantt", response_model=list[GanttTaskResponse])
@@ -192,7 +193,8 @@ async def gantt_view(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> list[GanttTaskResponse]:
-    return await task_service.get_gantt(project_id, current_user.org_id or "")
+    org_id = _require_org_id(current_user)
+    return await task_service.get_gantt(project_id, org_id)
 
 
 @router.get("/views/calendar", response_model=list[CalendarTaskResponse])
@@ -201,4 +203,5 @@ async def calendar_view(
     current_user: TokenData = Depends(get_current_user),
     task_service: TaskService = Depends(get_task_service),
 ) -> list[CalendarTaskResponse]:
-    return await task_service.get_calendar(project_id, current_user.org_id or "")
+    org_id = _require_org_id(current_user)
+    return await task_service.get_calendar(project_id, org_id)

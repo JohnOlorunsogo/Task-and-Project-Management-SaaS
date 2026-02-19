@@ -99,7 +99,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
@@ -208,6 +208,8 @@ async def upload_new_version(
     file_record = result.scalar_one_or_none()
     if not file_record:
         raise HTTPException(404, "File not found")
+    if current_user.org_id and file_record.org_id != uuid.UUID(current_user.org_id):
+        raise HTTPException(403, "Access denied — file belongs to a different organization")
 
     content = await file.read()
     size = len(content)
@@ -252,6 +254,8 @@ async def get_file(
     file_record = result.scalar_one_or_none()
     if not file_record:
         raise HTTPException(404, "File not found")
+    if current_user.org_id and file_record.org_id != uuid.UUID(current_user.org_id):
+        raise HTTPException(403, "Access denied — file belongs to a different organization")
     return FileResponse.model_validate(file_record)
 
 
@@ -283,6 +287,8 @@ async def download_file(
     file_record = result.scalar_one_or_none()
     if not file_record:
         raise HTTPException(404, "File not found")
+    if current_user.org_id and file_record.org_id != uuid.UUID(current_user.org_id):
+        raise HTTPException(403, "Access denied — file belongs to a different organization")
 
     # Get the requested version or latest
     if version:
@@ -344,6 +350,8 @@ async def delete_file(
     file_record = result.scalar_one_or_none()
     if not file_record:
         raise HTTPException(404, "File not found")
+    if current_user.org_id and file_record.org_id != uuid.UUID(current_user.org_id):
+        raise HTTPException(403, "Access denied — file belongs to a different organization")
 
     # Delete from MinIO
     client = get_minio()

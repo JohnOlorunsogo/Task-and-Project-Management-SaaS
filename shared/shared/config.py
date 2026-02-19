@@ -39,6 +39,8 @@ class BaseServiceSettings(BaseSettings):
     # Service
     service_port: int = 8000
     debug: bool = False
+    frontend_url: str = "http://localhost:3000"
+    internal_service_key: str = "changeme-internal-key"
 
     # Service URLs
     auth_service_url: str = "http://auth_service:8001"

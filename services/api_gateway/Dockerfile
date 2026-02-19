@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 WORKDIR /app
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN pip install --default-timeout=100 --no-cache-dir --upgrade pip setuptools wheel
 COPY shared/ /app/shared_lib/
-RUN pip install --no-cache-dir /app/shared_lib/
+RUN pip install --default-timeout=100 --no-cache-dir /app/shared_lib/
 COPY services/api_gateway/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY services/api_gateway/app ./app

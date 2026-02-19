@@ -145,14 +145,21 @@ class TaskService:
         await self.db.flush()
 
         if "status_name" in changed_fields or "status_id" in changed_fields:
+            # Fetch assignees so notification service can notify them
+            assign_stmt = select(TaskAssignment.user_id).where(TaskAssignment.task_id == task_id)
+            assign_result = await self.db.execute(assign_stmt)
+            assignee_ids = [str(uid) for uid in assign_result.scalars().all()]
+
             await event_producer.publish(
                 TOPICS["tasks"],
                 {
                     "event_type": TASK_STATUS_CHANGED,
                     "task_id": str(task_id),
+                    "org_id": org_id,
                     "old_status": old_status,
                     "new_status": task.status_name,
                     "actor_id": user_id,
+                    "assignees": assignee_ids,
                 },
                 key=str(task_id),
             )

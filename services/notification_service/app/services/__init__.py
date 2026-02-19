@@ -9,12 +9,12 @@ import uuid
 from typing import Any, Optional
 
 import redis.asyncio as redis
-from sqlalchemy import select, update
+from sqlalchemy import func as sqlfunc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.events import (
-    COMMENT_ADDED, TASK_ASSIGNED, TASK_CREATED,
-    TASK_STATUS_CHANGED, PROJECT_MEMBER_ADDED,
+    COMMENT_ADDED, TASK_ASSIGNED,
+    TASK_STATUS_CHANGED,
 )
 
 from app.models import Notification, NotificationPreference
@@ -68,7 +68,6 @@ class NotificationService:
         await self.db.flush()
 
     async def get_unread_count(self, user_id: str) -> int:
-        from sqlalchemy import func as sqlfunc
         stmt = select(sqlfunc.count()).select_from(Notification).where(
             Notification.user_id == uuid.UUID(user_id),
             Notification.is_read == False,  # noqa
@@ -140,17 +139,25 @@ class NotificationService:
 
 async def handle_task_assigned(event: dict[str, Any], session_factory, redis_client: redis.Redis) -> None:
     """Create notification when a task is assigned."""
-    async with session_factory() as db:
-        svc = NotificationService(db, redis_client)
-        await svc.create_notification(
-            user_id=event["user_id"],
-            org_id=event.get("org_id", ""),
-            type_=TASK_ASSIGNED,
-            title="Task Assigned",
-            message=f"You have been assigned to a task",
-            data={"task_id": event["task_id"]},
-        )
-        await db.commit()
+    user_id = event.get("user_id")
+    task_id = event.get("task_id")
+    if not user_id or not task_id:
+        return
+
+    try:
+        async with session_factory() as db:
+            svc = NotificationService(db, redis_client)
+            await svc.create_notification(
+                user_id=user_id,
+                org_id=event.get("org_id", ""),
+                type_=TASK_ASSIGNED,
+                title="Task Assigned",
+                message="You have been assigned to a task",
+                data={"task_id": task_id},
+            )
+            await db.commit()
+    except Exception:
+        logger.exception("Failed to handle task_assigned event")
 
 
 async def handle_comment_added(event: dict[str, Any], session_factory, redis_client: redis.Redis) -> None:
@@ -159,30 +166,55 @@ async def handle_comment_added(event: dict[str, Any], session_factory, redis_cli
     if not mentions:
         return
 
-    async with session_factory() as db:
-        svc = NotificationService(db, redis_client)
-        for user_id in mentions:
-            await svc.create_notification(
-                user_id=user_id,
-                org_id=event.get("org_id", ""),
-                type_=COMMENT_ADDED,
-                title="You were mentioned",
-                message=f"You were mentioned in a comment",
-                data={"task_id": event["task_id"], "comment_id": event["comment_id"]},
-            )
-        await db.commit()
+    task_id = event.get("task_id")
+    comment_id = event.get("comment_id")
+    if not task_id or not comment_id:
+        return
+
+    try:
+        async with session_factory() as db:
+            svc = NotificationService(db, redis_client)
+            for user_id in mentions:
+                await svc.create_notification(
+                    user_id=user_id,
+                    org_id=event.get("org_id", ""),
+                    type_=COMMENT_ADDED,
+                    title="You were mentioned",
+                    message="You were mentioned in a comment",
+                    data={"task_id": task_id, "comment_id": comment_id},
+                )
+            await db.commit()
+    except Exception:
+        logger.exception("Failed to handle comment_added event")
 
 
 async def handle_task_status_changed(event: dict[str, Any], session_factory, redis_client: redis.Redis) -> None:
-    """Notify assignees of status changes."""
-    async with session_factory() as db:
-        svc = NotificationService(db, redis_client)
-        await svc.create_notification(
-            user_id=event.get("actor_id", ""),
-            org_id=event.get("org_id", ""),
-            type_=TASK_STATUS_CHANGED,
-            title="Task Status Changed",
-            message=f"Task status changed from '{event.get('old_status')}' to '{event.get('new_status')}'",
-            data={"task_id": event["task_id"]},
-        )
-        await db.commit()
+    """Notify assignees of status changes (excluding the actor who made the change)."""
+    assignees = event.get("assignees", [])
+    actor_id = event.get("actor_id", "")
+    org_id = event.get("org_id")
+    task_id = event.get("task_id")
+
+    if not assignees or not task_id:
+        return
+
+    # Notify each assignee except the person who changed the status
+    recipients = [uid for uid in assignees if uid != actor_id]
+    if not recipients:
+        return
+
+    try:
+        async with session_factory() as db:
+            svc = NotificationService(db, redis_client)
+            for user_id in recipients:
+                await svc.create_notification(
+                    user_id=user_id,
+                    org_id=org_id or "",
+                    type_=TASK_STATUS_CHANGED,
+                    title="Task Status Changed",
+                    message=f"Task status changed from '{event.get('old_status')}' to '{event.get('new_status')}'",
+                    data={"task_id": task_id},
+                )
+            await db.commit()
+    except Exception:
+        logger.exception("Failed to handle task_status_changed event")

@@ -175,12 +175,19 @@ async def remove_member(
 async def check_membership(
     project_id: uuid.UUID,
     user_id: uuid.UUID,
+    request: Request,
     project_service: ProjectService = Depends(get_project_service),
 ) -> UserProjectMembershipResponse:
     """
     Internal endpoint to check if a user is a member of a project.
-    Used by Task Service.
+    Used by Task Service. Requires internal service key.
     """
+    from app.config import get_settings
+    settings = get_settings()
+    service_key = request.headers.get("x-internal-service-key")
+    if service_key != settings.internal_service_key:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Internal endpoint — invalid service key")
+
     membership = await project_service.get_membership(project_id, user_id)
     if not membership:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User is not a member of this project")
