@@ -12,7 +12,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from shared.auth.resolver import PermissionResolver
 from shared.database import db_manager
 from shared.events.producer import event_producer
-from shared.middleware import OrgScopingMiddleware
 from shared.models import HealthResponse
 
 from app.api import router as org_router
@@ -62,7 +61,6 @@ app = FastAPI(
 )
 
 app.add_middleware(CORSMiddleware, allow_origins=[get_settings().frontend_url], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-app.add_middleware(OrgScopingMiddleware)
 app.include_router(org_router)
 
 

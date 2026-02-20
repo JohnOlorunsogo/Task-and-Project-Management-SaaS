@@ -93,9 +93,7 @@ services:
       timeout: 10s
       retries: 5
 
-  #  
   # Microservices
-  #  
   api_gateway:
     build:
       context: .
