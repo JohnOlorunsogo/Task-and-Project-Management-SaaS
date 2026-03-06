@@ -126,11 +126,11 @@ async def update_task(
     task_id: uuid.UUID,
     data: UpdateTaskRequest,
     perm: PermissionResult = Depends(
-        require_task_project_permission(ProjectPermission.EDIT_TASK)
+        require_task_project_permission(ProjectPermission.EDIT_ANY_TASK)
     ),
     task_service: TaskService = Depends(get_task_service),
 ) -> TaskResponse:
-    """Update a task. Requires EDIT_TASK permission on the task's project."""
+    """Update a task. Requires EDIT_ANY_TASK permission on the task's project."""
     return await task_service.update_task(task_id, perm.org_id, perm.user_id, data)
 
 
@@ -138,11 +138,11 @@ async def update_task(
 async def delete_task(
     task_id: uuid.UUID,
     perm: PermissionResult = Depends(
-        require_task_project_permission(ProjectPermission.DELETE_TASK)
+        require_task_project_permission(ProjectPermission.DELETE_ANY_TASK)
     ),
     task_service: TaskService = Depends(get_task_service),
 ) -> None:
-    """Delete a task. Requires DELETE_TASK permission on the task's project."""
+    """Delete a task. Requires DELETE_ANY_TASK permission on the task's project."""
     await task_service.delete_task(task_id, perm.org_id, perm.user_id)
 
 
