@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, status
 
 from shared.auth import TokenData
 from shared.auth.rbac import ProjectPermission, OrgPermission, PermissionResult
